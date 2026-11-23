@@ -10,7 +10,7 @@ class Move(Node):
     def __init__(self):
         super().__init__('move')
 
-        # Subscribe to hand coordinates from the vision node
+        # Subscribe to hand information from the vision node
         self.subscription = self.create_subscription(
             Hand,
             'cmd_hand',
@@ -18,54 +18,61 @@ class Move(Node):
             10
         )
 
-        # Publish movement commands to the robot
+        # Publish movement commands to Turtlesim
         self.vel_publisher = self.create_publisher(
             Twist,
             'cmd_vel',
             10
         )
 
+        # Stop if hand messages are no longer received
+        self.last_hand_time = self.get_clock().now()
+        self.create_timer(0.2, self.check_timeout)
+
     def listener_callback(self, msg):
 
-        # Initialize angular and linear velocities
+        self.last_hand_time = self.get_clock().now()
+
+        # Initialize movement speeds
         angle = 0.0
         linear = 0.0
 
-        # Determine turning direction using index finger position
-        if msg.xindex > 0.55:
-            self.get_logger().info('right')
-            angle = -0.1
+        # Move only when the index finger is raised
+        if msg.xpinky == 1.0:
 
-        elif msg.xindex < 0.45:
-            self.get_logger().info('left')
-            angle = 0.1
+            if msg.xindex > 0.55:
+                self.get_logger().info('right')
+                angle = -0.5
+                linear = 0.5
+
+            elif msg.xindex < 0.45:
+                self.get_logger().info('left')
+                angle = 0.5
+                linear = 0.5
+
+            else:
+                self.get_logger().info('forward')
+                linear = 0.5
 
         else:
-            angle = 0.0
+            self.get_logger().info('stop')
 
-        # Determine forward movement using finger positions
-        if msg.xindex > msg.xpinky:
-            self.get_logger().info('come')
-            linear = 0.5
-
-        else:
-            self.get_logger().info('stay')
-            linear = 0.0
-
-        # Create a ROS 2 Twist message
+        # Create and publish the movement command
         twist = Twist()
-
-        # Set forward speed
         twist.linear.x = linear
-
-        # Set turning speed
         twist.angular.z = angle
 
-        # Publish movement commands if a subscriber exists
-        if self.vel_publisher.get_subscription_count() > 0:
-            self.vel_publisher.publish(twist)
-        else:
-            self.get_logger().info('waiting for subscriber')
+        self.vel_publisher.publish(twist)
+
+    def check_timeout(self):
+
+        # Stop if no hand message arrives for 0.5 seconds
+        elapsed = (
+            self.get_clock().now() - self.last_hand_time
+        ).nanoseconds / 1e9
+
+        if elapsed > 0.5:
+            self.vel_publisher.publish(Twist())
 
 
 def main(args=None):
@@ -78,9 +85,11 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
+        move.vel_publisher.publish(Twist())
         move.destroy_node()
         rclpy.shutdown()
 
 
 if __name__ == '__main__':
     main()
+

@@ -62,11 +62,11 @@ class Hands(Node):
             # Create a custom Hand message
             hand_msg = Hand()
 
-            # Get the horizontal position of the pinky finger
-            hand_msg.xpinky = landmarks[PINKY_FINGER_TIP].x
-
             # Get the horizontal position of the index finger
-            hand_msg.xindex = landmarks[INDEX_FINGER_TIP].x
+            hand_msg.xindex = landmarks[8].x
+
+            # Check if the index finger is raised
+            hand_msg.xpinky = 1.0 if landmarks[8].y < landmarks[6].y else 0.0
 
             # Publish coordinates when a subscriber is connected
             if self.hand_publisher.get_subscription_count() > 0:
